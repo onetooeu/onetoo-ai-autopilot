@@ -12,14 +12,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -56,20 +54,34 @@ jobs:
             exit 1
           fi
 
-          # Remove any whitespace/newlines/tabs that GitHub UI might have introduced
+          # odstráň whitespace, keby GitHub UI niečo zalomil
           CLEANED="$(printf '%s' "$MINISIGN_SECRET_B64" | tr -d '\n\r\t ')"
 
-          # Decode to minisign.key
+          # dekóduj secret key
           printf '%s' "$CLEANED" | base64 -d > minisign.key
           chmod 600 minisign.key
 
-      - name: Sign (zip + sha256)
+          # sanity check (musí byť 2 riadky)
+          LINES="$(wc -l < minisign.key | tr -d ' ')"
+          if [ "$LINES" != "2" ]; then
+            echo "ERROR: minisign.key should have 2 lines, got $LINES"
+            echo "--- minisign.key (redacted lengths) ---"
+            awk '{print NR ": len=" length($0)}' minisign.key
+            exit 1
+          fi
+
+      - name: Sign (zip + sha256) (stdin password)
         env:
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
           set -euo pipefail
-          minisign -Sm "${{ env.ZIP }}" -s minisign.key -P "$MINISIGN_PASSWORD"
-          minisign -Sm "${{ env.ZIP }}.sha256" -s minisign.key -P "$MINISIGN_PASSWORD"
+          if [ -z "${MINISIGN_PASSWORD:-}" ]; then
+            echo "ERROR: MINISIGN_PASSWORD secret is empty or missing."
+            exit 1
+          fi
+
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -Sm "${ZIP}" -s minisign.key
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -Sm "${ZIP}.sha256" -s minisign.key
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
