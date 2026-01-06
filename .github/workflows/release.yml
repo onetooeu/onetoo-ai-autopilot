@@ -11,78 +11,50 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
-      - name: Install + CI
+      - name: Install deps + test
         run: |
           npm ci
           npm run ci
           npm run worker:smoke
 
-      - name: Build release ZIP (no node_modules)
+      - name: Install minisign
         run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME}"
-          BASENAME="onetoo-ai-autopilot-${VERSION}"
-          ZIP="${BASENAME}.zip"
-
-          # clean any transient dirs
-          rm -rf dist .tmp_release
-
-          mkdir -p .tmp_release/"$BASENAME"
-          rsync -a \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'node_modules' \
-            --exclude 'dist' \
-            --exclude '*.log' \
-            --exclude '.DS_Store' \
-            ./ .tmp_release/"$BASENAME"/
-
-          (cd .tmp_release && zip -r "../$ZIP" "$BASENAME" >/dev/null)
-
-          sha256sum "$ZIP" > "${ZIP}.sha256"
-
-          echo "ZIP=$ZIP" >> $GITHUB_ENV
-
-      - name: Minisign (ZIP + SHA256)
-        env:
-          MINISIGN_SECRET_B64: ${{ secrets.MINISIGN_SECRET_B64 }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${MINISIGN_SECRET_B64}" ] || [ -z "${MINISIGN_PASSWORD}" ]; then
-            echo "Missing minisign secrets. Set MINISIGN_SECRET_B64 and MINISIGN_PASSWORD."
-            exit 1
-          fi
-
-          echo "${MINISIGN_SECRET_B64}" | base64 -d > minisign.key
-          chmod 600 minisign.key
-
-          # install minisign (static binary)
-          sudo apt-get update -y
+          sudo apt-get update
           sudo apt-get install -y minisign
 
-          # sign zip and checksum
-          minisign -S -s minisign.key -m "${ZIP}" -P "${MINISIGN_PASSWORD}"
-          minisign -S -s minisign.key -m "${ZIP}.sha256" -P "${MINISIGN_PASSWORD}"
+      - name: Build release zip (git archive)
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ZIP="onetoo-ai-autopilot-${TAG}.zip"
+          git archive --format=zip --output "$ZIP" "$TAG"
+          sha256sum "$ZIP" > "${ZIP}.sha256"
+          echo "ZIP=$ZIP" >> $GITHUB_ENV
 
-          rm -f minisign.key
+      - name: Import minisign secret key
+        env:
+          MINISIGN_SECRET_B64: ${{ secrets.MINISIGN_SECRET_B64 }}
+        run: |
+          echo "$MINISIGN_SECRET_B64" | base64 -d > minisign.key
+          chmod 600 minisign.key
 
-      - name: Create GitHub Release + upload assets
+      - name: Sign
+        env:
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          minisign -Sm "$ZIP" -s minisign.key -P "$MINISIGN_PASSWORD"
+          minisign -Sm "${ZIP}.sha256" -s minisign.key -P "$MINISIGN_PASSWORD"
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
           files: |
             ${{ env.ZIP }}
             ${{ env.ZIP }}.sha256
