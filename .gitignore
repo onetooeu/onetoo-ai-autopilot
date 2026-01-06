@@ -9,3 +9,11 @@ minisign.key
 *.zip
 *.sha256
 *.minisig
+
+# secrets / local key material
+minisign*.key
+minisign*.key.*
+*.minisig
+_release_verify/
+local-test.zip
+a.txt
