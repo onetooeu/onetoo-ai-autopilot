@@ -12,45 +12,64 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
 
       - name: Install deps + test
         run: |
+          set -euo pipefail
           npm ci
           npm run ci
           npm run worker:smoke
 
       - name: Install minisign
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y minisign
 
       - name: Build release zip (git archive)
         run: |
+          set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
           ZIP="onetoo-ai-autopilot-${TAG}.zip"
           git archive --format=zip --output "$ZIP" "$TAG"
           sha256sum "$ZIP" > "${ZIP}.sha256"
-          echo "ZIP=$ZIP" >> $GITHUB_ENV
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
-      - name: Import minisign secret key
+      - name: Import minisign secret key (whitespace-safe)
         env:
           MINISIGN_SECRET_B64: ${{ secrets.MINISIGN_SECRET_B64 }}
         run: |
-          echo "$MINISIGN_SECRET_B64" | base64 -d > minisign.key
+          set -euo pipefail
+          if [ -z "${MINISIGN_SECRET_B64:-}" ]; then
+            echo "ERROR: MINISIGN_SECRET_B64 secret is empty or missing."
+            exit 1
+          fi
+
+          # Remove any whitespace/newlines/tabs that GitHub UI might have introduced
+          CLEANED="$(printf '%s' "$MINISIGN_SECRET_B64" | tr -d '\n\r\t ')"
+
+          # Decode to minisign.key
+          printf '%s' "$CLEANED" | base64 -d > minisign.key
           chmod 600 minisign.key
 
-      - name: Sign
+      - name: Sign (zip + sha256)
         env:
           MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
         run: |
-          minisign -Sm "$ZIP" -s minisign.key -P "$MINISIGN_PASSWORD"
-          minisign -Sm "${ZIP}.sha256" -s minisign.key -P "$MINISIGN_PASSWORD"
+          set -euo pipefail
+          minisign -Sm "${{ env.ZIP }}" -s minisign.key -P "$MINISIGN_PASSWORD"
+          minisign -Sm "${{ env.ZIP }}.sha256" -s minisign.key -P "$MINISIGN_PASSWORD"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
