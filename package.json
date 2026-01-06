@@ -1,0 +1,20 @@
+{
+  "name": "onetoo-ai-autopilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ONETOO AI Autopilot: deterministic policy engine + multi-sig artifact publishing for sandbox/stable lanes.",
+  "license": "CC0-1.0",
+  "scripts": {
+    "test": "node --test",
+    "schema:check": "node ./scripts/schema-check.js",
+    "policy:golden": "node ./scripts/policy-golden.js",
+    "worker:smoke": "node ./scripts/worker-smoke.js",
+    "ci": "npm run schema:check && npm run policy:golden && npm test"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^3.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

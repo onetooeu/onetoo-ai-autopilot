@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onetoo.eu/schemas/contrib-sandbox.v2.schema.json",
+  "title": "ONETOO contrib sandbox registry v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "policy_version", "items"],
+  "properties": {
+    "schema": { "const": "onetoo.contrib-sandbox.v2" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "policy_version": { "type": "string" },
+    "items": {
+      "type": "array",
+      "maxItems": 200000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["submission_id", "lane", "entry", "decision"],
+        "properties": {
+          "submission_id": { "type": "string" },
+          "lane": { "const": "sandbox" },
+          "entry": { "$ref": "./contrib-submission.v2.schema.json#/properties/entry" },
+          "decision": { "$ref": "./contrib-decision.v2.schema.json" },
+          "first_seen_at": { "type": "string", "format": "date-time" },
+          "last_evaluated_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

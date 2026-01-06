@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onetoo.eu/schemas/policy-config.v2.schema.json",
+  "title": "ONETOO policy config v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "policy_version",
+    "replay_window_sec",
+    "threshold_stable",
+    "max_redirect_hops"
+  ],
+  "properties": {
+    "schema": { "const": "onetoo.policy-config.v2" },
+    "policy_version": { "type": "string", "minLength": 3, "maxLength": 128 },
+    "replay_window_sec": { "type": "integer", "minimum": 60, "maximum": 3600 },
+    "threshold_stable": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "threshold_quarantine": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "max_redirect_hops": { "type": "integer", "minimum": 0, "maximum": 10 },
+    "max_url_length": { "type": "integer", "minimum": 64, "maximum": 8192 },
+    "max_title_length": { "type": "integer", "minimum": 16, "maximum": 256 },
+    "max_description_length": { "type": "integer", "minimum": 32, "maximum": 1024 },
+    "track_params": { "type": "array", "items": { "type": "string" } }
+  }
+}
