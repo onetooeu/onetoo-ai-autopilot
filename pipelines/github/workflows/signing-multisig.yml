@@ -1,0 +1,92 @@
+name: Autopilot: apply proposal + multi-sig sign
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  apply_and_sign:
+    if: contains(github.event.issue.labels.*.name, 'proposal')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write proposal from issue body
+        shell: bash
+        run: |
+          mkdir -p proposals
+          cat > proposals/issue-${{ github.event.issue.number }}.json <<'JSON'
+          ${{ github.event.issue.body }}
+          JSON
+
+      - name: Apply proposal
+        run: node ./scripts/apply-proposal.js proposals/issue-${{ github.event.issue.number }}.json
+
+      - name: Download minisign
+        shell: bash
+        run: |
+          set -e
+          curl -L -o minisign.tar.gz https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz
+          tar -xzf minisign.tar.gz
+          sudo mv minisign-linux/minisign /usr/local/bin/minisign
+          minisign -V || true
+
+      - name: Sign stable artifact (autopilot)
+        shell: bash
+        env:
+          MINISIGN_AUTOPILOT_SECRET: ${{ secrets.MINISIGN_AUTOPILOT_SECRET }}
+        run: |
+          set -e
+          echo "$MINISIGN_AUTOPILOT_SECRET" > /tmp/autopilot.key
+          minisign -S -s /tmp/autopilot.key -m data/stable/contrib-accepted.v2.json -x data/stable/contrib-accepted.v2.json.minisig
+
+      - name: Sign stable artifact (root)
+        shell: bash
+        env:
+          MINISIGN_ROOT_SECRET: ${{ secrets.MINISIGN_ROOT_SECRET }}
+        run: |
+          set -e
+          echo "$MINISIGN_ROOT_SECRET" > /tmp/root.key
+          minisign -S -s /tmp/root.key -m data/stable/contrib-accepted.v2.json -x data/stable/contrib-accepted.v2.json.root.minisig
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -e
+          git config user.name "onetoo-autopilot"
+          git config user.email "autopilot@users.noreply.github.com"
+          git add data/stable data/sandbox proposals/*.json
+          git commit -m "autopilot: apply proposal #${{ github.event.issue.number }}" || echo "No changes to commit"
+          git push
+
+      - name: Comment + close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body: '✅ Proposal applied. Stable artifact updated and multi-signed.'
+            });
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number,
+              state: 'closed'
+            });

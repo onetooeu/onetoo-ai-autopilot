@@ -1,0 +1,42 @@
+{
+  "name": "claude",
+  "submission": {
+    "schema": "onetoo.contrib-submission.v2",
+    "submission_id": "subm-claude-001",
+    "submitted_at": "2026-01-06T16:40:00Z",
+    "author": {
+      "id": "did:tfws:example.com",
+      "pubkey": "ed25519:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    },
+    "entry": {
+      "title": "Claude (Anthropic AI Assistant)",
+      "url": "https://claude.ai",
+      "description": "Constitutional AI assistant by Anthropic",
+      "categories": ["AI", "Assistant", "Chat", "Research"],
+      "canonical": { "url": "https://claude.ai", "lang": "en" }
+    },
+    "client": { "ip_hash": "sha256:00", "ua_hash": "sha256:00" },
+    "nonce": "nonce-12345678",
+    "protocol": { "version": "tfws-v2", "replay_window_sec": 600 }
+  },
+  "ctx": {
+    "now": "2026-01-06T16:41:00Z",
+    "authorHistory": { "did:tfws:example.com": { "accepted": 0, "rejected": 0, "quarantined": 0 } },
+    "urlProbe": {
+      "hops": 0,
+      "hostChanged": false,
+      "usedHttp": false,
+      "finalUrl": "https://claude.ai"
+    },
+    "discovery": {
+      "ai_signal": true,
+      "ai_trust": true,
+      "trust": true
+    }
+  },
+  "expect": {
+    "decision": "stable",
+    "minScore": 65
+  }
+}

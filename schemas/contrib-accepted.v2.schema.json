@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onetoo.eu/schemas/contrib-accepted.v2.schema.json",
+  "title": "ONETOO contrib accepted-set v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "generated_at", "policy_version", "items"],
+  "properties": {
+    "schema": { "const": "onetoo.contrib-accepted.v2" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "policy_version": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["submission_id", "accepted_at", "accepted_by", "policy_version", "score", "reasons", "entry"],
+        "properties": {
+          "submission_id": { "type": "string" },
+          "accepted_at": { "type": "string", "format": "date-time" },
+          "accepted_by": { "type": "string" },
+          "policy_version": { "type": "string" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "reasons": { "type": "array", "items": { "type": "string" } },
+          "entry": { "$ref": "./contrib-submission.v2.schema.json#/properties/entry" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schema": "onetoo.policy-config.v2",
+  "policy_version": "2026-01-autopilot-01",
+  "replay_window_sec": 600,
+  "threshold_stable": 65,
+  "threshold_quarantine": 20,
+  "max_redirect_hops": 2,
+  "max_url_length": 2048,
+  "max_title_length": 140,
+  "max_description_length": 280,
+  "track_params": ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "msclkid"],
+  "blocked_categories": ["adult", "piracy", "malware"],
+  "blocked_tlds": ["zip", "mov", "tk"],
+  "blocked_host_suffixes": ["blogspot.com", "github.io"],
+  "score_weights": {
+    "author_reputation": 25,
+    "tfws_presence": 25,
+    "transport_security": 10,
+    "canonical_sanity": 15,
+    "tracking_cleanliness": 10,
+    "redirect_risk": 10,
+    "tld_risk": 5
+  }
+}
