@@ -1,0 +1,29 @@
+name: autopilot multi-sig signing
+
+on:
+  repository_dispatch:
+    types: [autopilot_proposal]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sign-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Multi-sig signing placeholder
+        run: |
+          echo "This workflow is intentionally conservative in this template." 
+          echo "Replace this step with your minisign installation + signing commands." 
+          echo "Expected secrets:" 
+          echo "  - MINISIGN_AUTOPILOT_SK (base64 or raw)" 
+          echo "  - MINISIGN_ROOT_SK (base64 or raw)" 
+          echo "Expected files:" 
+          echo "  - data/stable/contrib-accepted.v2.json" 
+          echo "Outputs:" 
+          echo "  - data/stable/contrib-accepted.v2.json.minisig" 
+          echo "  - data/stable/contrib-accepted.v2.json.root.minisig" 
