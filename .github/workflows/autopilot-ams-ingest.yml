@@ -46,14 +46,14 @@ jobs:
         run: npm run ingest:ams
 
       - name: Commit updated artifacts (only if data/ams changed)
-  run: |
-    # commit only if our artifact outputs changed (prevents empty churn)
-    if git diff --quiet -- data/ams/; then
-      echo "No artifact changes in data/ams"
-      exit 0
-    fi
-    git config user.name "onetoo-autopilot-bot"
-    git config user.email "actions@users.noreply.github.com"
-    git add data/ams
-    git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
-    git push
+        run: |
+          # commit only if our artifact outputs changed (prevents empty churn)
+          if git diff --quiet -- data/ams/; then
+            echo "No artifact changes in data/ams"
+            exit 0
+          fi
+          git config user.name "onetoo-autopilot-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/ams
+          git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
+          git push
