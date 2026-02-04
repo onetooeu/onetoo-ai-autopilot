@@ -41,13 +41,16 @@ jobs:
 
       - name: Ingest AMS contrib_submit
         env:
-          AMS_BASE_URL: ${{ github.event.inputs.ams_base_url || 'https://portal.onetoo.eu' }}
-          AMS_LIMIT: ${{ github.event.inputs.ams_limit || '200' }}
+          AMS_BASE_URL: ${{ inputs.ams_base_url || 'https://portal.onetoo.eu' }}
+          AMS_LIMIT: ${{ inputs.ams_limit || '200' }}
         run: npm run ingest:ams
+
       - name: Commit updated artifacts (only if JSON artifacts changed)
         shell: bash
         run: |
-          # commit only if JSON outputs changed (prevents cursor-only churn)
+          set -euo pipefail
+
+          # Commit only if JSON outputs changed (prevents cursor-only churn)
           if git diff --quiet -- data/ams/*.json; then
             echo "No JSON artifact changes in data/ams"
             exit 0
@@ -56,12 +59,25 @@ jobs:
           git config user.name "onetoo-autopilot-bot"
           git config user.email "actions@users.noreply.github.com"
 
-          # sync safely even if another run pushed meanwhile
-          git stash push -u -m "autopilot-prepull"
+          # Ensure clean tree for pull --rebase (stash EVERYTHING just in case)
+          git add -A
+          git stash push -u -m "autopilot-prepull" || true
+
+          # Sync with origin (another run may have pushed)
+          git fetch origin main
           git pull --rebase origin main
+
+          # Restore changes (if any)
           git stash pop || true
 
+          # Add only intended outputs (JSON + cursor)
           git add data/ams/*.json data/ams/lastCursor.txt
+
+          # In rare cases stash pop may bring no staged changes
+          if git diff --cached --quiet; then
+            echo "Nothing staged after sync; skipping commit"
+            exit 0
+          fi
+
           git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
           git push
-
