@@ -1,22 +1,33 @@
-﻿name: "Autopilot: apply proposal + multi-sig sign"
+﻿name: autopilot-ams-ingest
 
 on:
-  issues:
-    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      ams_base_url:
+        description: "AMS base URL"
+        required: true
+        default: "https://portal.onetoo.eu"
+      ams_limit:
+        description: "Max items per run"
+        required: true
+        default: "200"
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes (UTC)
 
 permissions:
   contents: write
-  issues: write
 
 concurrency:
-  group: signing-multisig-${{ github.event.issue.number }}
+  group: autopilot-ams-ingest
   cancel-in-progress: false
 
 jobs:
-  apply_and_sign:
-    # run only if issue has label "proposal" (works for both opened and labeled events)
-    if: contains(github.event.issue.labels.*.name, 'proposal')
+  ingest:
     runs-on: ubuntu-latest
+
+    env:
+      AMS_BASE_URL: ${{ github.event.inputs.ams_base_url || 'https://portal.onetoo.eu' }}
+      AMS_LIMIT: ${{ github.event.inputs.ams_limit || '200' }}
 
     steps:
       - name: Checkout
@@ -28,102 +39,45 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
+          cache: "npm"
 
-      - name: Install dependencies
+      - name: Install
         run: npm ci
 
-      - name: Write proposal from issue body
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p proposals
+      - name: Ingest AMS contrib_submit (pre)
+        run: npm run ingest:ams
 
-          # Write issue body as JSON file content (verbatim)
-          # NOTE: this assumes the issue body is valid JSON
-          cat > "proposals/issue-${{ github.event.issue.number }}.json" <<'JSON'
-          ${{ github.event.issue.body }}
-          JSON
-
-          # Optional: validate JSON early (fails fast with readable error)
-          node -e "JSON.parse(require('fs').readFileSync('proposals/issue-${{ github.event.issue.number }}.json','utf8')); console.log('OK JSON')"
-
-      - name: Apply proposal
-        shell: bash
-        run: |
-          set -euo pipefail
-          node ./scripts/apply-proposal.js "proposals/issue-${{ github.event.issue.number }}.json"
-
-      - name: Download minisign
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl -L -o minisign.tar.gz "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz"
-          tar -xzf minisign.tar.gz
-          sudo mv minisign-linux/minisign /usr/local/bin/minisign
-          minisign -V || true
-
-      - name: Sign stable artifact (autopilot)
-        shell: bash
-        env:
-          MINISIGN_AUTOPILOT_SECRET: ${{ secrets.MINISIGN_AUTOPILOT_SECRET }}
-        run: |
-          set -euo pipefail
-          test -n "${MINISIGN_AUTOPILOT_SECRET:-}" || (echo "Missing secret MINISIGN_AUTOPILOT_SECRET" && exit 1)
-          test -f "data/stable/contrib-accepted.v2.json" || (echo "Missing file data/stable/contrib-accepted.v2.json" && exit 1)
-
-          umask 077
-          printf "%s" "$MINISIGN_AUTOPILOT_SECRET" > /tmp/autopilot.key
-          minisign -S -s /tmp/autopilot.key \
-            -m data/stable/contrib-accepted.v2.json \
-            -x data/stable/contrib-accepted.v2.json.minisig
-
-      - name: Sign stable artifact (root)
-        shell: bash
-        env:
-          MINISIGN_ROOT_SECRET: ${{ secrets.MINISIGN_ROOT_SECRET }}
-        run: |
-          set -euo pipefail
-          test -n "${MINISIGN_ROOT_SECRET:-}" || (echo "Missing secret MINISIGN_ROOT_SECRET" && exit 1)
-          test -f "data/stable/contrib-accepted.v2.json" || (echo "Missing file data/stable/contrib-accepted.v2.json" && exit 1)
-
-          umask 077
-          printf "%s" "$MINISIGN_ROOT_SECRET" > /tmp/root.key
-          minisign -S -s /tmp/root.key \
-            -m data/stable/contrib-accepted.v2.json \
-            -x data/stable/contrib-accepted.v2.json.root.minisig
-
-      - name: Commit and push (only if changes)
+      - name: Commit updated artifacts (no-churn, hard-sync safe)
         shell: bash
         run: |
           set -euo pipefail
 
-          git config user.name "onetoo-autopilot"
-          git config user.email "autopilot@users.noreply.github.com"
-
-          # Stage only intended outputs
-          git add data/stable data/sandbox proposals/*.json || true
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
+          # If no JSON changes, exit early (prevents cursor-only churn)
+          if git diff --quiet -- data/ams/*.json; then
+            echo "No JSON artifact changes in data/ams"
             exit 0
           fi
 
-          git commit -m "autopilot: apply proposal #${{ github.event.issue.number }}"
-          git push
+          git config user.name "onetoo-autopilot-bot"
+          git config user.email "actions@users.noreply.github.com"
 
-      - name: Comment + close issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue_number = context.payload.issue.number;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number,
-              body: '✅ Proposal applied. Stable artifact updated and multi-signed.'
-            });
-            await github.rest.issues.update({
-              ...context.repo,
-              issue_number,
-              state: 'closed'
-            });
+          # HARD sync to origin/main to avoid rebase failures from CRLF/eol or other unstaged changes
+          git fetch origin main
+          git reset --hard origin/main
+          git clean -fdx
+
+          # Re-create outputs on top of the latest origin/main
+          npm ci
+          npm run ingest:ams
+
+          # Commit only intended outputs (JSON + cursor)
+          git add data/ams/*.json data/ams/lastCursor.txt
+
+          # Nothing to commit after hard-sync + rerun? then exit cleanly
+          if git diff --cached --quiet; then
+            echo "Nothing staged after hard-sync rerun; skipping commit"
+            exit 0
+          fi
+
+          git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
+          git push
