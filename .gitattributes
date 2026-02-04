@@ -1,0 +1,14 @@
+# Force consistent line endings in repo
+* text=auto eol=lf
+
+# Keep PowerShell scripts as CRLF (ak bude? ma?)
+*.ps1 text eol=crlf
+
+# Common text types
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.ts   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
