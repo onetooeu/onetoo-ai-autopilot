@@ -20,6 +20,27 @@
       "ingested_at": "2026-02-04T15:33:54.174Z",
       "payload_sha256": "ab64d9d9953054779c3a4725487fa3fa195686c799ca347416f3f1cf80fbb477",
       "received_at": "2026-02-04T15:00:57.585Z"
+    },
+    {
+      "canonical": {
+        "envelope_id": "env_1a265dcbab0058_19c2a487b1e",
+        "lang": "sk",
+        "note": "ack-smoke",
+        "source": "hgpedu",
+        "submitted_at": "2026-02-04T20:11:57.000Z",
+        "tags": [
+          "hgpedu",
+          "ack-test"
+        ],
+        "title": "hgpedu submit test ACK",
+        "url": "https://example.com"
+      },
+      "canonical_sha256": "ae593faecb784d7bf5c75235fb9506c3b8d035c7bfe7e4eb3d8438883c4be9b9",
+      "envelope_id": "env_1a265dcbab0058_19c2a487b1e",
+      "envelope_sha256": "42fe45264b69dbe406f7236eb4c91323f7f307eb64427b80cd5eebc6735e8552",
+      "ingested_at": "2026-02-04T20:12:42.530Z",
+      "payload_sha256": null,
+      "received_at": "2026-02-04T20:11:59.134Z"
     }
   ],
   "kind": "contrib-sandbox",
@@ -28,6 +49,6 @@
     "ams_base": "https://portal.onetoo.eu",
     "thread": "t_contrib_submit"
   },
-  "updated_at": "2026-02-04T18:05:40.942Z",
+  "updated_at": "2026-02-04T20:12:42.548Z",
   "version": "v1"
 }
