@@ -12,7 +12,7 @@ on:
         required: true
         default: "200"
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+    - cron: "*/10 * * * *" # every 10 minutes (UTC)
 
 permissions:
   contents: write
@@ -39,18 +39,19 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Ingest AMS contrib_submit
+      # Run ingest once (fast), then we will re-run it after hard-sync to origin/main
+      - name: Ingest AMS contrib_submit (pre)
         env:
-          AMS_BASE_URL: ${{ inputs.ams_base_url || 'https://portal.onetoo.eu' }}
-          AMS_LIMIT: ${{ inputs.ams_limit || '200' }}
+          AMS_BASE_URL: ${{ github.event.inputs.ams_base_url || 'https://portal.onetoo.eu' }}
+          AMS_LIMIT: ${{ github.event.inputs.ams_limit || '200' }}
         run: npm run ingest:ams
 
-      - name: Commit updated artifacts (only if JSON artifacts changed)
+      - name: Commit updated artifacts (no-churn, hard-sync safe)
         shell: bash
         run: |
           set -euo pipefail
 
-          # Commit only if JSON outputs changed (prevents cursor-only churn)
+          # If no JSON changes, exit early (prevents cursor-only churn)
           if git diff --quiet -- data/ams/*.json; then
             echo "No JSON artifact changes in data/ams"
             exit 0
@@ -59,23 +60,21 @@ jobs:
           git config user.name "onetoo-autopilot-bot"
           git config user.email "actions@users.noreply.github.com"
 
-          # Ensure clean tree for pull --rebase (stash EVERYTHING just in case)
-          git add -A
-          git stash push -u -m "autopilot-prepull" || true
-
-          # Sync with origin (another run may have pushed)
+          # HARD sync to origin/main to avoid rebase failures from CRLF/eol or other unstaged changes
           git fetch origin main
-          git pull --rebase origin main
+          git reset --hard origin/main
+          git clean -fdx
 
-          # Restore changes (if any)
-          git stash pop || true
+          # Re-create outputs on top of the latest origin/main
+          npm ci
+          AMS_BASE_URL="${AMS_BASE_URL:-https://portal.onetoo.eu}" AMS_LIMIT="${AMS_LIMIT:-200}" npm run ingest:ams
 
-          # Add only intended outputs (JSON + cursor)
+          # Commit only intended outputs (JSON + cursor)
           git add data/ams/*.json data/ams/lastCursor.txt
 
-          # In rare cases stash pop may bring no staged changes
+          # Nothing to commit after hard-sync + rerun? then exit cleanly
           if git diff --cached --quiet; then
-            echo "Nothing staged after sync; skipping commit"
+            echo "Nothing staged after hard-sync rerun; skipping commit"
             exit 0
           fi
 
