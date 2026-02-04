@@ -10,7 +10,8 @@
     "schema:check": "node ./scripts/schema-check.js",
     "policy:golden": "node ./scripts/policy-golden.js",
     "worker:smoke": "node ./scripts/worker-smoke.js",
-    "ci": "npm run schema:check && npm run policy:golden && npm test"
+    "ci": "npm run schema:check && npm run policy:golden && npm test",
+    "ingest:ams": "node scripts/ingest-ams-contrib.mjs"
   },
   "dependencies": {
     "@noble/ed25519": "^3.0.0",
