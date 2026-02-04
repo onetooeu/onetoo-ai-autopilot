@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Ingest HGPEdu "chem submit" envelopes from portal AMS into Autopilot sandbox artifacts.
  * ESM version (repo uses "type":"module").
  *
