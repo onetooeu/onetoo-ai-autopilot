@@ -45,23 +45,24 @@ jobs:
           AMS_LIMIT: ${{ github.event.inputs.ams_limit || '200' }}
         run: npm run ingest:ams
 
-      - name: Commit updated artifacts (only if JSON artifacts changed)
-  run: |
-    # commit only if JSON outputs changed (prevents cursor-only churn)
-    if git diff --quiet -- data/ams/*.json; then
-      echo "No JSON artifact changes in data/ams"
-      exit 0
-    fi
+            - name: Commit updated artifacts (only if JSON artifacts changed)
+        shell: bash
+        run: |
+          # commit only if JSON outputs changed (prevents cursor-only churn)
+          if git diff --quiet -- data/ams/*.json; then
+            echo "No JSON artifact changes in data/ams"
+            exit 0
+          fi
 
-    git config user.name "onetoo-autopilot-bot"
-    git config user.email "actions@users.noreply.github.com"
+          git config user.name "onetoo-autopilot-bot"
+          git config user.email "actions@users.noreply.github.com"
 
-    # sync safely even if another run pushed meanwhile
-    git stash push -u -m "autopilot-prepull"
-    git pull --rebase origin main
-    git stash pop || true
+          # sync safely even if another run pushed meanwhile
+          git stash push -u -m "autopilot-prepull"
+          git pull --rebase origin main
+          git stash pop || true
 
-    git add data/ams/*.json data/ams/lastCursor.txt
-    git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
-    git push
+          git add data/ams/*.json data/ams/lastCursor.txt
+          git commit -m "autopilot: ingest ams contrib_submit (scheduled)"
+          git push
 
