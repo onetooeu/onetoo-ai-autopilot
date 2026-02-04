@@ -21,7 +21,7 @@ function sha256Hex(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
-// Deterministic JSON stringify: stable key order
+// Deterministic JSON stringify: stable key order (used only for canonical hashing)
 function stableStringify(x) {
   if (x === null || typeof x !== "object") return JSON.stringify(x);
   if (Array.isArray(x)) return "[" + x.map(stableStringify).join(",") + "]";
@@ -29,24 +29,53 @@ function stableStringify(x) {
   return "{" + keys.map(k => JSON.stringify(k) + ":" + stableStringify(x[k])).join(",") + "}";
 }
 
+// Deterministic JSON output: deep-sorted keys + stable formatting
+function sortKeysDeep(x) {
+  if (x === null || typeof x !== "object") return x;
+  if (Array.isArray(x)) return x.map(sortKeysDeep);
+  const out = {};
+  for (const k of Object.keys(x).sort()) out[k] = sortKeysDeep(x[k]);
+  return out;
+}
+
 function nowIso() { return new Date().toISOString(); }
+
+function normalizeBase(u) {
+  return String(u || "").replace(/\/+$/, "");
+}
 
 function readTextIfExists(p) {
   try { return fs.readFileSync(p, "utf8"); } catch { return null; }
 }
 
-function writeJson(p, obj) {
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2) + "\n", "utf8");
+function readJsonIfExists(p) {
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+}
+
+function writeTextIfChanged(p, text) {
+  const prev = readTextIfExists(p);
+  if (prev === text) return false;
+  fs.writeFileSync(p, text, "utf8");
+  return true;
+}
+
+function writeJsonIfChanged(p, obj) {
+  const stableObj = sortKeysDeep(obj);
+  const next = JSON.stringify(stableObj, null, 2) + "\n";
+  const prev = readTextIfExists(p);
+  if (prev === next) return false;
+  fs.writeFileSync(p, next, "utf8");
+  return true;
 }
 
 async function fetchJson(url) {
-  const res = await fetch(url, { headers: { "accept": "application/json" }});
+  const res = await fetch(url, { headers: { "accept": "application/json" } });
   const txt = await res.text();
   let j;
   try { j = JSON.parse(txt); } catch {
-    throw new Error(`Non-JSON response ${res.status} from ${url}: ${txt.slice(0,200)}`);
+    throw new Error(`Non-JSON response ${res.status} from ${url}: ${txt.slice(0, 200)}`);
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}: ${txt.slice(0,200)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}: ${txt.slice(0, 200)}`);
   return j;
 }
 
@@ -69,7 +98,7 @@ function basicValidate(payload) {
 }
 
 async function main() {
-  const base = process.env.AMS_BASE_URL || DEFAULT_BASE;
+  const base = normalizeBase(process.env.AMS_BASE_URL || DEFAULT_BASE);
   const limit = Number(process.env.AMS_LIMIT || "200");
 
   const outDir = path.join(process.cwd(), "data", "ams");
@@ -78,7 +107,12 @@ async function main() {
   const rejectedPath = path.join(outDir, "contrib-rejected.v1.json");
 
   const lastCursor = (readTextIfExists(cursorPath) || "").trim();
-  const params = new URLSearchParams({ thread: THREAD, status: "queued", limit: String(limit) });
+
+  const params = new URLSearchParams({
+    thread: THREAD,
+    status: "queued",
+    limit: String(limit),
+  });
   if (lastCursor) params.set("cursor", lastCursor);
 
   const url = `${base}/ams/v1/envelopes?${params.toString()}`;
@@ -86,12 +120,12 @@ async function main() {
 
   const j = await fetchJson(url);
   const items = Array.isArray(j.items) ? j.items : [];
-  const nextCursor = (j.nextCursor || "").trim();
+  const nextCursor = String(j.nextCursor || "").trim();
 
-  const prevSandbox = (() => { try { return JSON.parse(fs.readFileSync(sandboxPath, "utf8")); } catch { return null; } })();
-  const prevRejected = (() => { try { return JSON.parse(fs.readFileSync(rejectedPath, "utf8")); } catch { return null; } })();
+  const prevSandbox = readJsonIfExists(sandboxPath);
+  const prevRejected = readJsonIfExists(rejectedPath);
 
-  const sandbox = prevSandbox && Array.isArray(prevSandbox.items) ? prevSandbox : {
+  const sandbox = (prevSandbox && Array.isArray(prevSandbox.items)) ? prevSandbox : {
     ok: true,
     kind: "contrib-sandbox",
     version: "v1",
@@ -100,7 +134,7 @@ async function main() {
     items: []
   };
 
-  const rejected = prevRejected && Array.isArray(prevRejected.items) ? prevRejected : {
+  const rejected = (prevRejected && Array.isArray(prevRejected.items)) ? prevRejected : {
     ok: true,
     kind: "contrib-rejected",
     version: "v1",
@@ -109,9 +143,16 @@ async function main() {
     items: []
   };
 
+  // Always normalize source (but we won't churn timestamps unless something changed)
+  const prevSandboxUpdatedAt = sandbox.updated_at || null;
+  const prevRejectedUpdatedAt = rejected.updated_at || null;
+
+  sandbox.source = { ams_base: base, thread: THREAD };
+  rejected.source = { ams_base: base, thread: THREAD };
+
   const seen = new Set();
-  for (const it of sandbox.items) seen.add(it.canonical_sha256);
-  for (const it of rejected.items) seen.add(it.canonical_sha256);
+  for (const it of sandbox.items) if (it?.canonical_sha256) seen.add(it.canonical_sha256);
+  for (const it of rejected.items) if (it?.canonical_sha256) seen.add(it.canonical_sha256);
 
   let addedSandbox = 0, addedRejected = 0;
 
@@ -137,7 +178,7 @@ async function main() {
     const v = basicValidate(canonicalObj);
 
     const record = {
-      envelope_id: env?.id,
+      envelope_id: env?.id || null,
       envelope_sha256: env?.sha256 || null,
       payload_sha256: env?.meta?.payload_sha256 || null,
       canonical_sha256: canonicalSha,
@@ -146,23 +187,44 @@ async function main() {
       ingested_at: nowIso()
     };
 
-    if (v.ok) { sandbox.items.push(record); addedSandbox++; }
-    else { rejected.items.push({ ...record, reasons: v.reasons }); addedRejected++; }
+    if (v.ok) {
+      sandbox.items.push(record);
+      addedSandbox++;
+    } else {
+      rejected.items.push({ ...record, reasons: v.reasons });
+      addedRejected++;
+    }
   }
 
-  sandbox.updated_at = nowIso();
-  rejected.updated_at = nowIso();
-  sandbox.items.sort((a,b)=>a.canonical_sha256.localeCompare(b.canonical_sha256));
-  rejected.items.sort((a,b)=>a.canonical_sha256.localeCompare(b.canonical_sha256));
+  // Deterministic ordering of items
+  sandbox.items.sort((a, b) => String(a.canonical_sha256).localeCompare(String(b.canonical_sha256)));
+  rejected.items.sort((a, b) => String(a.canonical_sha256).localeCompare(String(b.canonical_sha256)));
 
-  writeJson(sandboxPath, sandbox);
-  writeJson(rejectedPath, rejected);
-  if (nextCursor) fs.writeFileSync(cursorPath, nextCursor + "\n", "utf8");
+  // Only bump updated_at if there were real additions OR if file was missing
+  const sandboxWasNew = !(prevSandbox && Array.isArray(prevSandbox.items));
+  const rejectedWasNew = !(prevRejected && Array.isArray(prevRejected.items));
+  const didAdd = (addedSandbox + addedRejected) > 0;
+
+  if (sandboxWasNew || didAdd) sandbox.updated_at = nowIso();
+  else sandbox.updated_at = prevSandboxUpdatedAt || sandbox.updated_at || nowIso();
+
+  if (rejectedWasNew || didAdd) rejected.updated_at = nowIso();
+  else rejected.updated_at = prevRejectedUpdatedAt || rejected.updated_at || nowIso();
+
+  // Write JSON only if changed (prevents updated_at churn & formatting churn)
+  const wroteSandbox = writeJsonIfChanged(sandboxPath, sandbox);
+  const wroteRejected = writeJsonIfChanged(rejectedPath, rejected);
+
+  // Cursor: write only if it advanced (prevents cursor churn)
+  let wroteCursor = false;
+  if (nextCursor && nextCursor !== lastCursor) {
+    wroteCursor = writeTextIfChanged(cursorPath, nextCursor + "\n");
+  }
 
   console.log(`[ingest] items_fetched=${items.length} added_sandbox=${addedSandbox} added_rejected=${addedRejected}`);
-  console.log(`[ingest] wrote: data/ams/contrib-sandbox.v1.json`);
-  console.log(`[ingest] wrote: data/ams/contrib-rejected.v1.json`);
-  console.log(`[ingest] cursor: ${nextCursor || "(unchanged)"} -> data/ams/lastCursor.txt`);
+  console.log(`[ingest] wrote: data/ams/contrib-sandbox.v1.json${wroteSandbox ? "" : " (unchanged)"}`);
+  console.log(`[ingest] wrote: data/ams/contrib-rejected.v1.json${wroteRejected ? "" : " (unchanged)"}`);
+  console.log(`[ingest] cursor: ${nextCursor ? (nextCursor === lastCursor ? "(unchanged)" : nextCursor) : "(unchanged)"} -> data/ams/lastCursor.txt${wroteCursor ? "" : " (unchanged)"}`);
 }
 
 main().catch(err => {

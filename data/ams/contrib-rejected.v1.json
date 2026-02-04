@@ -1,11 +1,11 @@
 {
-  "ok": true,
+  "items": [],
   "kind": "contrib-rejected",
-  "version": "v1",
-  "updated_at": "2026-02-04T18:05:40.942Z",
+  "ok": true,
   "source": {
     "ams_base": "https://portal.onetoo.eu",
     "thread": "t_contrib_submit"
   },
-  "items": []
+  "updated_at": "2026-02-04T18:05:40.942Z",
+  "version": "v1"
 }
