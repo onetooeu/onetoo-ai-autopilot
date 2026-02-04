@@ -44,8 +44,7 @@ jobs:
           AMS_BASE_URL: ${{ github.event.inputs.ams_base_url || 'https://portal.onetoo.eu' }}
           AMS_LIMIT: ${{ github.event.inputs.ams_limit || '200' }}
         run: npm run ingest:ams
-
-            - name: Commit updated artifacts (only if JSON artifacts changed)
+      - name: Commit updated artifacts (only if JSON artifacts changed)
         shell: bash
         run: |
           # commit only if JSON outputs changed (prevents cursor-only churn)
